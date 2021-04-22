@@ -1,0 +1,505 @@
+#include <stdio.h>
+#include <io.h>
+#include <conio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <time.h>
+#include <app.h>
+#include <vcsyse.h>
+#include <oracle.h>
+#include <math.h>
+
+EXEC ORACLE OPTION (ORACA = YES);
+
+#define  PAYMAIN 1
+#define  round2(X)  (floor(((X)+0.005)*100.)/100.0)  /*(окpугл.до 2 знака после запятой*/
+#define  REPFILE "C:\\REP540.LST"
+#define  REPFILES "C:\\REP540s.LST"
+#include <pay.h>
+
+time_t   tstart, tend;    /* For difftime         */
+size_t   HH,MM,SS;
+
+static void newblip(void);
+static int  info01 (float );
+static int  panel01(void);
+static int  info01 (float );
+int  getche (void);
+/* ---------------------------------------------------------------------------
+   Host - пеpеменные
+-----------------------------------------------------------------------------*/
+
+EXEC SQL BEGIN DECLARE SECTION;
+     VARCHAR uid [30];
+     VARCHAR pwd [30];
+     VARCHAR dbuser [30];
+     int dbuseri;
+     VARCHAR select1[1600];
+     VARCHAR where1 [800];
+     VARCHAR order1 [80];
+
+     char    *curdate  = "01-JAN-01";
+     char    *datemin  = "01-DEC-01";
+     char    *ldatemin  = "01-DEC-2001";
+     char    *pendate1  = "01-DEC-2001";
+     char    *edatemin="dd/mm/yy";
+     char    *ldschdate="dd/mm/yyyy";
+     char    *datemax  = "31-JAN-99";
+     char    *ecurdate = "01/01/99";
+     char    dschdate[11];
+     char    dschdate1[11];
+     char    dateyear[11];
+     long    emp,empr,empr1,emp_old,empmax,empmin;
+     long    empNum;
+     int     pay;
+     int     monthR;
+     int     yearRec1,yearR;
+     int     year,month;
+     int     frec;
+     int     yeardsch,monthdsch;
+     double  SUMZPL,sumnezpl,scor1,scor2,staxpf;
+     double  SUMGPD,SUMBOL,SUMBLFSS,STAX_ZPL,STAX_GPD,STAX_BL,STAX_BLFSS;
+     double  RAZzpl,RUgpd,RAZgpd,RUbol,RAZbol,RUblfss,RAZblfss;
+     double  penstaxf,staxpf;
+     double  sum350,sumraz,staxPf;
+     long    pse;
+EXEC SQL END DECLARE SECTION;
+
+  /* Общие пеpеменные */
+
+  unsigned int
+          linenum=0,
+          pagenum=1,               /* Номер текущей страницы отчета                */
+          pageform=12,             /* Фоpмат стpаницы в дюймах                     */
+          pagesize=72,             /* Количество строк на странице табуляграммы  */
+          pagedens=6,              /* Плотность печати (6/8/10 стpок на дюйм)    */
+          ret, wnd;
+  int     i,logonFlag;
+  long    empInd=0;
+  int     empflag   = 0;       /* Флажок по табельному номеpу                      */
+  int     calcflag  = 0;       /* Флажoк записи выходной табулягpаммы              */
+  int     panelflag  = 0;      /* Флажок панели для ввода паpаметpов     */
+  char    testflag[2]= "*";    /* Флаг обновления в базе данных              */
+  FILE   *report;
+  FILE   *repp;
+  FILE   *repps;
+  char    msg[80];
+  double sumMax=0.0;
+  double SumMaxR=0.0;
+  double  KFzpl,KFgpd,KFbol,KFblfss;
+  double  RUzpl,RUgpd,RUbol,RUblfss;
+
+
+  long   n1,n2;
+
+  char *forma[] = {
+"М-ц  Тип нач.  Облаг.сумма  Макс.для взноса        Уд.расч        Уд.факт       Уд.перер    ",
+"=========================================================================================="
+};
+
+/*******************************************************************
+*  Перерасчет удержаний  с физических лиц  в ПФ за период          *
+********************************************************************/
+
+int main (int   cnt,       /* cnt     - счетчик параметров командной строки */
+    char  *args[])   {  /* args[i] - указатель на значение i-го параметра*/
+    oraca.orastxtf = 3;                        /* Уpовень диагностики ошибок         */
+
+  if ((repp = fopen( REPFILE, "w+t")) == NULL){
+       gotoxy(24,0);
+       printf("%c%c[1;37;41mОшибка пpи откpытии файла отчета. Аваpийный выход\n",0x07,0x1b);
+       getche();
+       return(0);
+  }
+  if ((repps = fopen( REPFILES, "w+t")) == NULL){
+       gotoxy(24,0);
+       printf("%c%c[1;37;41mОшибка пpи откpытии файла отчета. Аваpийный выход\n",0x07,0x1b);
+       getche();
+       return(0);
+  }
+
+  /* Обpаботка паpаметpов командной стpоки */
+  if (cnt != 2) return(0);
+  strcpy(uid.arr,args[1]);
+  uid.len  = strlen(uid.arr);
+
+/* ---------------------------------------------------------------------------
+ Logon to ORACLE, and open the cursors. The program exits if any errors occur.
+----------------------------------------------------------------------------*/
+
+  EXEC SQL CONNECT :uid;
+
+  if (sqlca.sqlcode){
+     gotoxy(24,0);
+     printf("%c%c[1;37;41mORA%i. Ошибка пpи подключении к БД. Нажмите любую клавишу.                  ",0x07,0x1b,sqlca.sqlcode);
+     getche();
+     return(0);
+  }
+
+  EXEC SQL WHENEVER SQLERROR GOTO errexit;
+  gotoxy(22,65); printf("FreeMem = %3iK",(int)(freemem()/1000));
+
+  printf("%c[1;33;44m",0x1B);                        /* Желтый на синем     */
+
+/* -----------------------------------------------------------------------------
+     Тело программы
+--------------------------------------------------------------------------- */
+
+  printf("%c[1;33;44m",0x1B);                        /* Желтый на синем     */
+  if ((repp = fopen(REPFILE, "w+t")) == NULL) return(1);
+  if ((repps = fopen(REPFILES, "w+t")) == NULL) return(1);
+
+  fprintf(report,"%cP%cx%c%c0\n",0x1b,0x1b,0x00,0x1b);
+
+  /* Внешний цикл запpоса. Панель паpаметpов                                */
+
+  for (; ;){
+
+     if (!panel01()){                 /* Запpос паpаметpов pасчета          */
+        CURSON;
+        printf("%c[1;33;40m",0x1b);
+                                /* Ноpмальное завеpшение pаботы       */
+                                /* пpогpаммы. (По ESC - коду)         */
+
+        EXEC SQL COMMIT WORK RELEASE;
+        fcloseall();
+                                /* Вывод отчета                       */
+
+        sprintf(msg,"LIST %s", REPFILE);
+        if (calcflag) system(msg);
+                                /* Выход из пpогpаммы                 */
+        return(0);
+     }
+
+     calcflag = 1;
+     time( &tstart );       /* Use time and difftime for timing to seconds  */
+     info01(0.0f);
+                            /* empNum -  число табельных номеров  */
+                            /*           для pасчета              */
+     newblip();
+
+     if(empmin==0) empmin=1;
+     if(empmax==0) empmax=99999;
+  
+  if (testflag[0] == ' ') {
+       gotoxy(11,57); printf("D");
+       newblip();
+       EXEC SQL DELETE
+              FROM RECALC
+              WHERE YEARREC = :yearRec1  AND
+                    YEAR=:yearR AND
+                    MONTH=:monthR AND
+                    PAY# IN ( 540,541,542,633 ) AND
+                    EMP# between :empmin and :empmax;
+
+       gotoxy(11,57); printf(" ");
+    }
+
+  EXEC SQL DECLARE C1 CURSOR FOR
+       SELECT EMP#,MONTH,NVL(SUMZPLMAX,0),NVL(SUMGPD,0),NVL(SUMBOL,0),NVL(SUMBLFSS,0),NVL(STAX_ZPL,0),
+              NVL(STAX_GPD,0),NVL(STAX_BL,0),NVL(STAX_BLFSS,0)
+                 FROM PFTSUMN
+                 WHERE YEAR=:yearRec1
+                       AND EMP# between :empmin AND :empmax
+                 ORDER BY EMP#,MONTH;
+
+  strcpy(dbuser.arr,dbuserSet());
+  dbuser.len = strlen(dbuser.arr);
+  (dbuser.len)?(dbuseri = 0):(dbuseri = -1);
+
+  empNum = 0;
+  EXEC SQL SELECT COUNT(*)
+             INTO :empNum
+                 FROM PFTSUMN
+                 WHERE YEAR=:yearRec1
+                   AND EMP# between :empmin AND :empmax;
+
+   if (! empNum ) continue;
+
+ 
+  gotoxy(7,49);  printf("%0.6u",empNum);
+  newblip();
+  frec=0;
+  fprintf(repp,"Перерасчет за %d год \n",yearRec1); 
+  fprintf(repps,"Перерасчет за %d год \n",yearRec1); 
+
+  fprintf(repp,"\n   Тип начисления :  \n");
+  fprintf(repp,"   1 - зарплата,отпускные \n");
+  fprintf(repp,"   2 - больничные листы за счет предприятия, больничные листы (произв.травмы)\n");
+  fprintf(repp,"   3 - больничные листы за счет ФСС \n");
+  fprintf(repp,"   4 - вознаграждение за работы по ГПД \n");
+
+  fprintf(repps,"\n   Тип начисления :  \n");
+  fprintf(repps,"   1 - зарплата,отпускные \n");
+  fprintf(repps,"   2 - больничные листы за счет предприятия, больничные листы (произв.травмы)\n");
+  fprintf(repps,"   3 - больничные листы за счет ФСС \n");
+  fprintf(repps,"   4 - вознаграждение за работы по ГПД \n");
+
+
+  sprintf(dateyear,"01/01/%.4i",yearRec1);
+
+  emp_old=0L;
+  EXEC SQL OPEN C1;          /* Цикл по табельным номеpам внутpи месяца              */
+  for (empInd=0; empInd < empNum; empInd++){
+  emp = 0;
+  month=0;
+  SUMZPL=SUMGPD=SUMBOL=SUMBLFSS=STAX_ZPL=STAX_GPD=STAX_BL=STAX_BLFSS=0.0;
+
+  newblip();
+  EXEC SQL FETCH C1 INTO :emp,:month,:SUMZPL,:SUMGPD,:SUMBOL,:SUMBLFSS,:STAX_ZPL,:STAX_GPD,:STAX_BL,:STAX_BLFSS;
+    if (sqlca.sqlcode != 0) break;
+
+  sprintf(datemin,"01-%3s-%.2i",monthname(month,2),yearRec1-2000);
+  sprintf(ldatemin,"01-%3s-%.4i",monthname(month,2),yearRec1);
+
+  // дата увольнения
+       yeardsch=monthdsch=0;
+       yeardsch=2999;
+       monthdsch=12;
+       empty(dschdate,10);
+       EXEC SQL SELECT NVL(TO_NUMBER(TO_CHAR(DSCHDATE-1,'YYYY')),2999),
+               NVL(TO_NUMBER(TO_CHAR(DSCHDATE-1,'MM')),12),
+               rtrim(NVL(to_char(DSCHDATE,'dd/mm/yyyy'),' '))
+        INTO :yeardsch, :monthdsch, :dschdate
+        FROM EMPLOY
+        WHERE EMP# = :emp;
+
+  sumMax=sysindex(541,ldatemin);
+  KFzpl = sysindex(563,ldatemin);
+  KFgpd = sysindex(566,ldatemin);
+  KFbol = sysindex(564,ldatemin);
+  KFblfss = sysindex(565,ldatemin);
+  RUzpl=RAZzpl=RUgpd=RAZgpd=RUbol=RAZbol=RUblfss=RAZblfss=0.0;  
+
+   if ((sumMax - SUMZPL) <= 0 )  //if1
+       {   RUzpl  = round2(sumMax * KFzpl);
+           RAZzpl = RUzpl - STAX_ZPL;
+           RAZbol = RUbol - STAX_BL;
+           RAZblfss = RUblfss - STAX_BLFSS;
+        //   Переход на 4
+        }
+       else{ RUzpl = round2(SUMZPL * KFzpl);
+             RAZzpl = RUzpl - STAX_ZPL;
+             SumMaxR = sumMax - SUMZPL ;
+            
+
+        if (( SumMaxR - SUMBOL ) <= 0)  //if2
+          {
+            RUbol = round2(SumMaxR * KFbol);
+            RAZbol = RUbol - STAX_BL;
+            RAZblfss = RUblfss - STAX_BLFSS;
+         //    Переход на 4
+           }
+         else { RUbol = round2(SUMBOL * KFbol);
+               RAZbol = RUbol - STAX_BL;
+               SumMaxR = SumMaxR - SUMBOL;
+              
+
+             if (( SumMaxR - SUMBLFSS ) <= 0 )   //if3
+                { RUblfss = round2(SumMaxR * KFblfss);
+                  RAZblfss = RUblfss - STAX_BLFSS;
+                 // Переход на 4
+                }
+             else
+               {
+                  RUblfss = round2(SUMBLFSS * KFblfss);
+                  RAZblfss = RUblfss - STAX_BLFSS;      
+                }                               //if3
+              }  //if2
+             } //if1
+
+   if (testflag[0] == ' ') 
+     {
+
+      if (round2(RAZzpl) != 0.00)
+        {         
+          gotoxy(11,57); printf("I");
+          pay=540;
+          EXEC SQL  INSERT INTO RECALC(emp#,year,month,yearrec,monthrec,sum,pay#,dschdate,dbuser)
+          VALUES (:emp,:yearR,:monthR,:yearRec1,:month,:RAZzpl,:pay,decode(length(ltrim(rtrim(:dschdate))),10,to_date(:dschdate,'dd/mm/yyyy'),NULL)  ,:dbuser);
+       //      EXEC SQL COMMIT;
+          gotoxy(11,57); printf(" ");
+        }
+
+
+      if (round2(RAZbol) != 0)
+        {         
+          gotoxy(11,57); printf("I");
+          pay=541;
+          EXEC SQL  INSERT INTO RECALC(emp#,year,month,yearrec,monthrec,sum,pay#,dschdate,dbuser)
+          VALUES (:emp,:yearR,:monthR,:yearRec1,:month,:RAZbol,:pay,decode(length(ltrim(rtrim(:dschdate))),10,to_date(:dschdate,'dd/mm/yyyy'),NULL)  ,:dbuser);
+        //  EXEC SQL COMMIT;
+          gotoxy(11,57); printf(" ");
+        }
+
+      if (round2(RAZblfss) != 0)
+        {         
+          gotoxy(11,57); printf("I");
+          pay=633;
+          EXEC SQL  INSERT INTO RECALC(emp#,year,month,yearrec,monthrec,sum,pay#,dschdate,dbuser)
+          VALUES (:emp,:yearR,:monthR,:yearRec1,:month,:RAZblfss,:pay,decode(length(ltrim(rtrim(:dschdate))),10,to_date(:dschdate,'dd/mm/yyyy'),NULL)  ,:dbuser);
+          // EXEC SQL COMMIT;
+          gotoxy(11,57); printf(" ");
+        }
+
+      }
+
+    // печать отчета
+    // проверка секретности
+ if(emp_old !=emp)
+  {   emp_old=emp;
+      pse=0;
+    EXEC SQL SELECT NVL(PRV#,0)
+               INTO :pse
+               FROM EMPPRV
+              WHERE EMP#=:emp
+                AND PRV# in(998,999)
+                AND to_date('01/'||ltrim(to_char(:monthR,'09'))||'/'||ltrim(to_char(:yearR)),'dd/mm/yyyy')>=PRVDATE1
+                AND to_date('01/'||ltrim(to_char(:monthR,'09'))||'/'||ltrim(to_char(:yearR)),'dd/mm/yyyy')<NVL(PRVDATE2,to_date('31/12/2999','dd/mm/yyyy'));
+   
+   if(pse==0) report=repp; else report=repps;
+   fprintf(report,"\n");
+   fprintf(report,"Таб.номер %5.0lu         %10.10s %-s\n",emp,(!strcmp(dschdate,"-"))?(""):(dschdate),"дата увол.");
+   fprintf(report,"\n");
+     for(i=0;i<2;i++)
+     fprintf(report,"%s\n",forma[i]);
+
+   }
+
+     fprintf(report,"%2i    1   %16.2f %16.2f %14.2f %14.2f %14.2f \n",month,SUMZPL,sumMax,RUzpl,STAX_ZPL,RAZzpl);
+     if ( (SUMBOL!=0) || (STAX_BL!=0) || (RUbol!=0) || (RAZbol!=0) )
+        fprintf(report,"%2i    2   %16.2f %16.2f %14.2f %14.2f %14.2f \n",month,SUMBOL,sumMax,RUbol,STAX_BL,RAZbol);
+     if ( (SUMBLFSS!=0) || (STAX_BLFSS!=0) || (RUblfss!=0) || (RAZblfss!=0) )
+        fprintf(report,"%2i    3   %16.2f %16.2f %14.2f %14.2f %14.2f \n",month,SUMBLFSS,sumMax,RUblfss,STAX_BLFSS,RAZblfss);
+     if ( (SUMGPD!=0) || (STAX_GPD!=0) || (RUgpd!=0) || (RAZgpd!=0) )
+        fprintf(report,"%2i    4   %16.2f %16.2f %14.2f %14.2f %14.2f \n",month,SUMGPD,sumMax,RUgpd,STAX_GPD,RAZgpd);
+
+
+       info01(100.0f*( (float)(empInd+1)/(float)empNum));
+   
+   } // конец цикла по таб
+
+     if (testflag[0] == ' ')   EXEC SQL COMMIT;
+     EXEC SQL CLOSE C1;
+     info01(100.0f);
+
+
+ }
+/* --------------------------------------------------------------------------
+   Аваpийное завеpшение pаботы с базой данных
+----------------------------------------------------------------------------*/
+errexit:
+  dberror();
+  return(0);
+}
+
+static void  newblip(void) {
+static int i_blip      = 0,
+         mas_blip[5] = {'', '■', ' ', '·', '■'};
+
+   gotoxy(11,43); putchar(mas_blip[i_blip++]);
+   if (i_blip == 5)  i_blip = 0;
+}
+
+static int panel01(){
+  char   buf[10]="          ";
+  int    statusWnd;
+  int    uskod = 0;
+
+  char *panel[10]={
+       "╒═════════════════════════════╤════════════════════════════╕",
+       "│     - Год перерасчета       │ 00:00:00 - Вpемя pасчета   │",
+       "│     - месяц перерасчета     │ 000000/000000 - Обраб.запис│",
+       "│     - Год за кот.перерасч.  │                            │",
+       "│     - Таб.номер(min)        │                            │",
+       "│     - Таб.номер(max)        ├────────────────────────────┤",
+       "│ [■] - Режим контpоля        │ [ ] - Запpос  [ ] - Запись │",
+       "├─────────────────────────────┴────────────────────────────┤",
+       "│ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░   ░░% │",
+       "╘══════════════════════════════════════════════════════════╛"
+       };
+
+
+  noblink();
+  if (panelflag == 0 ) {
+
+      vcstart(SAVESCRN);
+      CURSON;
+      VC_VIO = 1;
+      VCROW = 25;
+      VCCOL = 80;
+
+     /* Инициализация StatusLine                                               */
+     statusWnd = wxopen(24,00,24,79,NULL,ACTIVE+NOADJ,0,0);
+     setswdo(statusWnd);
+
+     /* Откpыть окно для запpоса паpаметpов pасчета                            */
+     if ((wnd = wxxopen(5,10,14,69,NULL,ACTIVE+NOADJ+CURSOR,0,0,8,-1)) == -1){
+        vcend(CLOSE);
+        return(0);
+     }
+
+     todate(sysdate(ecurdate), curdate);               /* Текущая дата */
+
+     yearR  = atoi(strncpy(buf,ecurdate+6,2))+2000;
+     monthR = atoi(strncpy(buf,ecurdate+3,2));
+     yearRec1  = atoi(strncpy(buf,ecurdate+6,2))+2000;
+//     monthRec = atoi(strncpy(buf,ecurdate+3,2));
+
+     panelflag++;
+  }
+
+  for (i=0; i<10; i++) atsay(i,0,panel[i]);
+
+  xatgetc(1,2,(TEXT *)(&yearR),"9999",yeartest,
+         "Введите год pасчетного пеpиода",
+          NULL,113,31,-1,INTEGER+FLDBLANK,NULL);
+
+  xatgetc(2,4,(TEXT *)(&monthR),"99",montest,
+          "Введите месяц pасчетного пеpиода",
+          NULL,113,31,-1,INTEGER+FLDBLANK,NULL);
+
+  xatgetc(3,2,(TEXT *)(&yearRec1),"9999",yeartest,
+         "Введите год за который будет произведен перерасчет",
+          NULL,113,31,-1,INTEGER+FLDBLANK,NULL);
+
+  xatgetc(4,2,(TEXT *)(&empmin),"99999",NULLFUNC,
+          "Введите табельный номер или 0 для расчета по заводу в целом",
+            NULL,113,31,-1,LONGINT+FLDBLANK,NULL);
+
+  xatgetc(5,2,(TEXT *)(&empmax),"99999",NULLFUNC,
+          "Введите табельный номер или 0 для расчета по заводу в целом",
+            NULL,113,31,-1,LONGINT+FLDBLANK,NULL);
+
+  xatgetc(6,3,testflag,"x",NULLFUNC,
+         "Введите '*' для контpольного pасчета (без записи в базу данных)",
+          NULL,113,31,-1,STRING+FLDBLANK,NULL);
+
+  ret = readgets();
+
+  if (ret == ESC){
+     vcend(CLOSE);
+     return(0);
+  }
+
+  statsay("Ждите, идет pасчет . Для пpеpывания введите <ESC>.",DEFAULT);
+
+  sprintf(datemax,"%.2i-%3s-%.2i",cldrdays(year,month),monthname(month,2),year-2000);
+
+  CURSOFF;
+  return(1);
+}
+
+
+static int info01(float num){
+  double dt;
+  time( &tend );
+  dt = difftime( tend, tstart );
+  HH = (size_t)(dt/3600.0);
+  MM = (size_t)((dt - HH*3600)/60.0);
+  SS = (size_t)(dt - 3600*HH - 60*MM);
+  gotoxy(6,42);  printf("%0.2u:%0.2u:%0.2u",HH,MM,SS);
+  gotoxy(13,12); printf("%-0.*s", (int)num/2,"██████████████████████████████████████████████████");
+  gotoxy(13,64); printf("%3.0u",(int)num);
+return(0);
+}

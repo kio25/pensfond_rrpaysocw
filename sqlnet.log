@@ -1,0 +1,42 @@
+
+
+***********************************************************************
+Fatal OSN connect error 12203, connecting to:
+ (DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(COMMUNITY=spx.world)(PROTOCOL=SPX)(Service=NETFIN1)))(CONNECT_DATA=(SID=ORCL)(CID=(PROGRAM=delphi32.exe)(HOST=I40884)(USER=27939))))
+
+  VERSION INFORMATION:
+	TNS for 32-bit Windows: Version 2.3.3.0.0 - Production
+	NOVELL SPX/IPX NT Protocol Adapter for 32-bit Windows: Version 2.3.3.0.0 - Production
+  Time: 28-APR-11 08:57:53
+  Tracing not turned on.
+  Tns error struct:
+    nr err code: 12203
+    TNS-12203: TNS:unable to connect to destination
+    ns main err code: 12541
+    TNS-12541: TNS:no listener
+    ns secondary err code: 12560
+    nt main err code: 511
+    TNS-00511: No listener
+    nt secondary err code: 0
+    nt OS err code: 0
+
+
+***********************************************************************
+Fatal OSN connect error 12203, connecting to:
+ (DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(COMMUNITY=spx.world)(PROTOCOL=SPX)(Service=NETFIN1)))(CONNECT_DATA=(SID=ORCL)(CID=(PROGRAM=delphi32.exe)(HOST=I40884)(USER=27939))))
+
+  VERSION INFORMATION:
+	TNS for 32-bit Windows: Version 2.3.3.0.0 - Production
+	NOVELL SPX/IPX NT Protocol Adapter for 32-bit Windows: Version 2.3.3.0.0 - Production
+  Time: 23-MAY-11 10:57:00
+  Tracing not turned on.
+  Tns error struct:
+    nr err code: 12203
+    TNS-12203: TNS:unable to connect to destination
+    ns main err code: 12541
+    TNS-12541: TNS:no listener
+    ns secondary err code: 12560
+    nt main err code: 511
+    TNS-00511: No listener
+    nt secondary err code: 0
+    nt OS err code: 0
